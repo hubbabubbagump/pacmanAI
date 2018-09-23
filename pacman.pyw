@@ -1564,7 +1564,7 @@ score_inc = 0.5
 init_games = 100
 renderGhosts = True
 nextIteration = False
-dataSizeLimit = 10000
+dataSizeLimit = 6000
 learnRate = 1e-3
 loadModel = False
 epochs = 10
@@ -1771,6 +1771,10 @@ def genData(x, model, gen):
 
         scores.append(score)
         print("Generation: ", gen, " | Iteration: ", iteration, " | Won: ", won, " | Score: ", "{0:10.4f}".format(totalScore, 5), " / ", score_req)
+
+        
+        if len(trainingData) > dataSizeLimit:
+            break
 
     # saveData = np.array([trainingData, score_req])
     # np.save('trainData.py', saveData)
