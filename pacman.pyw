@@ -20,7 +20,7 @@
 # - Changed the code from python2 to python3
 # - Fixed some issues with recursion
 
-import pygame, sys, os, random, math
+import pygame, sys, os, random, math, time
 from pygame.locals import *
 import numpy as np
 import tflearn
@@ -1558,18 +1558,19 @@ speedMultiplier = 4
 
 #machine learning vars
 steps = 50
-score_req = 50
-score_req_cap = 220
-score_inc = 0.5
+startGeneration = 0 ##
+score_req = 100 ##
+score_req_cap = 400
+score_inc = 2
 init_games = 100
 renderGhosts = True
 nextIteration = False
 dataSizeLimit = 6000
 learnRate = 1e-3
-loadModel = False
+loadModel = False ##
 epochs = 10
-init_greed = 1
-inc_greed = 0.05
+init_greed = 1 ##
+inc_greed = 0.01
 final_greed = 0.1
 
 #rewards
@@ -1753,15 +1754,18 @@ def genData(x, model, gen):
             currObservation = observation
             totalScore += reward
 
-            if dead and reward == win:
+            if dead and reward == win and model:
                 won = True
+                filename = "models/pacman" + str(gen) + "-" + str(time.time()) + ".tflearn"
+                model.save(filename)
 
             if dead or nextIteration:
                 nextIteration = False
                 break
 
-        if (score >= score_req):
+        if (totalScore >= score_req) or (not model and loadModel):
             acceptedScores.append(score)
+            print("Using data for training:")
             for data in memory:
                 sample = [0, 0, 0, 0]
                 # print(data[0])
@@ -1813,13 +1817,13 @@ def fitModel(model, X, Y):
 
 def train():
     global steps, score_req, init_greed
-    generation = 0
+    generation = startGeneration
     increaseScore = True
 
     print("Generation ", generation)
 
     tempReq = score_req
-    score_req = 20
+    score_req = 35
     if loadModel == False:
         data = genData(init_games, None, generation)
     else:
