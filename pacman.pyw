@@ -885,6 +885,8 @@ class pacman ():
                 ghostLoc[ghostRow, ghostCol] = 1
             elif ghosts[i].state == 2:
                 blueGhostLoc[ghostRow, ghostCol] = 1
+
+        pacmanLoc[self.nearestRow, self.nearestCol] = 1
         
         return np.float32(np.array([walls, pacmanLoc, dots, capsules, ghostLoc, blueGhostLoc]))
         
@@ -1559,9 +1561,9 @@ speedMultiplier = 4
 #machine learning vars
 steps = 50
 startGeneration = 0 ##
-score_req = 100 ##
+score_req = 70 ##
 score_req_cap = 400
-score_inc = 2
+score_inc = 1
 init_games = 100
 renderGhosts = True
 nextIteration = False
@@ -1812,7 +1814,7 @@ def create_model(data):
 
 def fitModel(model, X, Y):
     model.fit(X, Y, n_epoch=epochs, batch_size=32, show_metric=True)
-    model.save('pacman.tflearn')
+    model.save('pacman2.tflearn')
 
 
 def train():
