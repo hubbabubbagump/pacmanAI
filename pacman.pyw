@@ -160,7 +160,7 @@ class game ():
             self.imHiscores=self.makehiscorelist()
 
     def __init__ (self):
-        self.levelNum = 0
+        self.levelNum = 1
         self.score = 0
         self.lives = 0
         
@@ -273,7 +273,7 @@ class game ():
         return self.levelNum
     
     def SetNextLevel (self):
-        self.levelNum += 1
+        self.levelNum = 1
         
         self.SetMode( 4 )
         thisLevel.LoadLevel( thisGame.GetLevelNum() )
@@ -672,7 +672,7 @@ class ghost ():
         else:
             # glasses found way back to ghost box
             self.state = 1
-            self.speed = self.speed / 4
+            self.speed = self.speed / 2
             
             # give ghost a path to a random spot (containing a pellet)
             (randRow, randCol) = (0, 0)
@@ -896,7 +896,7 @@ class pacman ():
         self.nearestRow = int(((self.y + 8) / 16))
         self.nearestCol = int(((self.x + 8) / 16))
 
-        self.reward = time
+        self.reward = moveReward
 
         # make sure the current velocity will not cause a collision before moving
         if not thisLevel.CheckIfHitWall((self.x + self.velX, self.y + self.velY), (self.nearestRow, self.nearestCol)):
@@ -929,7 +929,7 @@ class pacman ():
                         self.reward = eatGhost
                         
                         ghosts[i].state = 3
-                        ghosts[i].speed = ghosts[i].speed * 4
+                        ghosts[i].speed = ghosts[i].speed * 2
                         # and send them to the ghost box
                         ghosts[i].x = ghosts[i].nearestCol * 16
                         ghosts[i].y = ghosts[i].nearestRow * 16
@@ -987,7 +987,7 @@ class pacman ():
         if thisGame.fruitScoreTimer > 0:
             thisGame.fruitScoreTimer -= 1
 
-        return self.map(), self.reward, dead
+        return self.reward, dead
             
         
     def Draw (self):
@@ -1461,21 +1461,33 @@ def CheckInputs(action):
             if not thisLevel.CheckIfHitWall((player.x + player.speed, player.y), (player.nearestRow, player.nearestCol)): 
                 player.velX = player.speed
                 player.velY = 0
-                
+            else:
+                player.velX = 0
+                player.velY = 0
+
         elif pygame.key.get_pressed()[ pygame.K_LEFT ] or (js!=None and js.get_axis(JS_XAXIS)<0) or (action == 1):
             if not thisLevel.CheckIfHitWall((player.x - player.speed, player.y), (player.nearestRow, player.nearestCol)): 
                 player.velX = -player.speed
+                player.velY = 0
+            else:
+                player.velX = 0
                 player.velY = 0
             
         elif pygame.key.get_pressed()[ pygame.K_DOWN ] or (js!=None and js.get_axis(JS_YAXIS)>0) or (action == 2):
             if not thisLevel.CheckIfHitWall((player.x, player.y + player.speed), (player.nearestRow, player.nearestCol)): 
                 player.velX = 0
                 player.velY = player.speed
+            else:
+                player.velX = 0
+                player.velY = 0
             
         elif pygame.key.get_pressed()[ pygame.K_UP ] or (js!=None and js.get_axis(JS_YAXIS)<0) or (action == 3):
             if not thisLevel.CheckIfHitWall((player.x, player.y - player.speed), (player.nearestRow, player.nearestCol)):
                 player.velX = 0
                 player.velY = -player.speed
+            else:
+                player.velX = 0
+                player.velY = 0
 
         if pygame.key.get_pressed()[ pygame.K_SPACE ]:
             global nextIteration
@@ -1556,30 +1568,31 @@ def GetCrossRef ():
 #      __________________
 # ___/  main code block  \_____________________________________________________
 
-speedMultiplier = 4
-
 #machine learning vars
-steps = 50
-startGeneration = 0 ##
-score_req = 70 ##
-score_req_cap = 400
-score_inc = 1
-init_games = 100
+learnRate = 1e-3
+games_per_gen = 30
+
+#Loading saved model
+loadModel = False
+loadGeneration = 0
+load_path = "./models/model-" + str(loadGeneration)
+
+#Greedy method
+greedy_value = 1
+greedy_decrement = 0.01
+greedy_stop = 0.1
+
+#other variables
+speedMultiplier = 8
 renderGhosts = True
 nextIteration = False
-dataSizeLimit = 6000
-learnRate = 1e-3
-loadModel = False ##
-epochs = 10
-init_greed = 1 ##
-inc_greed = 0.01
-final_greed = 0.1
+firstWin = -1
 
 #rewards
 eatGhost = 5
 eatDot = 10
 lose = -100
-time = -0.1
+moveReward = -1
 win = 100
 
 # create the pacman
@@ -1616,255 +1629,225 @@ if pygame.joystick.get_count()>0:
   js.init()
 else: js=None
 
-observation = []
-
 def renderGame(action, gen, iteration):
-        CheckIfCloseButton( pygame.event.get() )
         
-        if thisGame.mode == 1 or thisGame.mode == 5 or thisGame.mode == 6:
-            if (thisGame.mode == 6):
-                observation = player.map()
-                reward = win
-                dead = True
-                return observation, reward, dead
+    CheckIfCloseButton( pygame.event.get() )
+    
+    if thisGame.mode == 1 or thisGame.mode == 5 or thisGame.mode == 6:
+        if (thisGame.mode == 6):
+            reward = win
+            dead = True
+            return reward, dead
 
-            # normal gameplay mode
-            CheckInputs(action)
-            
-            thisGame.modeTimer += 1
-            observation, reward, dead = player.Move()
-            if (renderGhosts == True):
-                for i in range(0, 4, 1):
-                    ghosts[i].Move()
-            # thisFruit.Move()
-                
-        elif thisGame.mode == 2:
-            # waiting after getting hit by a ghost
-            thisGame.modeTimer += 1
-            
-            if thisGame.modeTimer >= 0:
-                thisLevel.Restart()
-                
-                thisGame.lives -= 1
-                if thisGame.lives == -1:
-                    thisGame.updatehiscores(thisGame.score)
-                else:
-                    thisGame.SetMode( 4 )
-                    
-        elif thisGame.mode == 3:
-            # game over
-            CheckInputs(action)
-                
-        elif thisGame.mode == 4:
-            # waiting to start
-            thisGame.modeTimer += 1
-            
-            if thisGame.modeTimer >= 0:
-                thisGame.SetMode( 1 )
-                player.velX = player.speed
-                
-        elif thisGame.mode == 6:
-            # pause after eating all the pellets
-            thisGame.modeTimer += 1
-            
-            if thisGame.modeTimer >= 0:
-                thisGame.SetMode( 7 )
-                oldEdgeLightColor = thisLevel.edgeLightColor
-                oldEdgeShadowColor = thisLevel.edgeShadowColor
-                oldFillColor = thisLevel.fillColor
-                
-        elif thisGame.mode == 7:
-            # flashing maze after finishing level
-            thisGame.modeTimer += 1
-            thisGame.SetMode ( 8 )
-                
-        elif thisGame.mode == 8:
-            # blank screen before changing levels
-            thisGame.modeTimer += 1
-            if thisGame.modeTimer >= 0:
-                thisGame.SetNextLevel()
-
-        thisGame.SmartMoveScreen()
+        # normal gameplay mode
+        CheckInputs(action)
         
-        screen.blit(img_Background, (0, 0))
-        
-        if not thisGame.mode == 8:
-            thisLevel.DrawMap()
-
-            thisGame.DrawNumber(gen, (5, 5))
-            thisGame.DrawNumber(iteration, (5, 21))
-            
-            # if thisGame.fruitScoreTimer > 0:
-            #     if thisGame.modeTimer % 2 == 0:
-            #         thisGame.DrawNumber (2500, (thisFruit.x - thisGame.screenPixelPos[0] - 16, thisFruit.y - thisGame.screenPixelPos[1] + 4))
-
+        thisGame.modeTimer += 1
+        reward, dead = player.Move()
+        if (renderGhosts == True):
             for i in range(0, 4, 1):
-                ghosts[i].Draw()
-            # thisFruit.Draw()
-            player.Draw()
+                ghosts[i].Move()
+        # thisFruit.Move()
             
-            # if thisGame.mode == 3:
-            #         screen.blit(thisGame.imHiscores,(32,256))
+    elif thisGame.mode == 2:
+        # waiting after getting hit by a ghost
+        thisGame.modeTimer += 1
+        
+        if thisGame.modeTimer >= 0:
+            thisLevel.Restart()
             
-        # if thisGame.mode == 5:
-        #     thisGame.DrawNumber (thisGame.ghostValue / 2, (player.x - thisGame.screenPixelPos[0] - 4, player.y - thisGame.screenPixelPos[1] + 6))
+            thisGame.lives -= 1
+            if thisGame.lives == -1:
+                thisGame.updatehiscores(thisGame.score)
+            else:
+                thisGame.SetMode( 4 )
+                
+    elif thisGame.mode == 3:
+        # game over
+        CheckInputs(action)
+            
+    elif thisGame.mode == 4:
+        # waiting to start
+        thisGame.modeTimer += 1
         
+        if thisGame.modeTimer >= 0:
+            thisGame.SetMode( 1 )
+            player.velX = player.speed
+            
+    elif thisGame.mode == 6:
+        # pause after eating all the pellets
+        thisGame.modeTimer += 1
         
-        
-        # thisGame.DrawScore()
-        
-        pygame.display.flip()
-        
-        clock.tick (60)
-        return observation, reward, thisGame.score, dead
+        if thisGame.modeTimer >= 0:
+            thisGame.SetMode( 7 )
+            oldEdgeLightColor = thisLevel.edgeLightColor
+            oldEdgeShadowColor = thisLevel.edgeShadowColor
+            oldFillColor = thisLevel.fillColor
+            
+    elif thisGame.mode == 7:
+        # flashing maze after finishing level
+        thisGame.modeTimer += 1
+        thisGame.SetMode ( 8 )
+            
+    elif thisGame.mode == 8:
+        # blank screen before changing levels
+        thisGame.modeTimer += 1
+        if thisGame.modeTimer >= 0:
+            thisGame.SetNextLevel()
 
-def genData(x, model, gen):
-    global nextIteration
+    thisGame.SmartMoveScreen()
+    
+    screen.blit(img_Background, (0, 0))
+    
+    if not thisGame.mode == 8:
+        thisLevel.DrawMap()
 
-    trainingData = []
-    scores = []
-    acceptedScores = []
+        thisGame.DrawNumber(gen, (5, 5))
+        thisGame.DrawNumber(iteration, (5, 21))
+        
+        # if thisGame.fruitScoreTimer > 0:
+        #     if thisGame.modeTimer % 2 == 0:
+        #         thisGame.DrawNumber (2500, (thisFruit.x - thisGame.screenPixelPos[0] - 16, thisFruit.y - thisGame.screenPixelPos[1] + 4))
+
+        for i in range(0, 4, 1):
+            ghosts[i].Draw()
+        # thisFruit.Draw()
+        player.Draw()
+        
+        # if thisGame.mode == 3:
+        #         screen.blit(thisGame.imHiscores,(32,256))
+        
+    # if thisGame.mode == 5:
+    #     thisGame.DrawNumber (thisGame.ghostValue / 2, (player.x - thisGame.screenPixelPos[0] - 4, player.y - thisGame.screenPixelPos[1] + 6))
+    
+    
+    
+    # thisGame.DrawScore()
+    
+    pygame.display.flip()
+    
+    clock.tick (60)
+    return reward, dead
+
+def genData(x, model, gen, session, update, saver, states, rewards, actions):
+    global nextIteration, firstWin
+
+    # The current state, and the reward by taking a certain action from the current state
+    state_temp = []
+    reward_temp = []
+    action_temp = []
 
     for iteration in range(x):
         thisGame.StartNewGame()
-        memory = []
-        predictions = []
-        currObservation = []
-        prevObservation = []
-        prevAction = -1
+        currentObservation = []
         totalScore = 0
 
         won = False
 
         while True:
+            currentObservation = player.map()
+            prediction = model.eval(session=session, feed_dict={states: [currentObservation]})
+
             greedy = random.uniform(0, 1.0)
-            if (len(prevObservation) == 0) or (not model) or greedy < init_greed:
+            if greedy < greedy_value:
                 action = random.randrange(0, 4)
             else:
-                # prediction = model.predict(prevObservation.reshape(-1, len(prevObservation), 1))
-                prediction = model.predict(np.array([observation]))
-                action = np.argmax(prediction[0])
-
-            observation, reward, score, dead = renderGame(action, gen, iteration + 1)
-            predictions.append(observation)
-
-            if (len(prevObservation) > 0):
-                memory.append([observation, action])
-            prevAction = action
+                action = np.argmax(prediction)
             
-            prevObservation = currObservation
-            currObservation = observation
+            actionArray = [0, 0, 0, 0]
+            actionArray[action] = 1
+
+            reward, dead = renderGame(action, gen, iteration + 1)
+
+            if len(state_temp) >= 2000 and len(action_temp) >= 2000 and len(reward_temp) >= 2000:
+                session.run(update, feed_dict={rewards: reward_temp, actions: action_temp, states: state_temp})
+                state_temp = []
+                reward_temp = []
+                action_temp = []
+
+            state_temp.append(currentObservation)
+            action_temp.append(actionArray)
+            reward_temp.append(reward)
             totalScore += reward
 
-            if dead and reward == win and model:
-                won = True
-                filename = "models/pacman" + str(gen) + "-" + str(time.time()) + ".tflearn"
-                model.save(filename)
-
             if dead or nextIteration:
+                if reward == win:
+                    won = True
                 nextIteration = False
                 break
 
-        if (totalScore >= score_req) or (not model and loadModel):
-            acceptedScores.append(score)
-            print("Using data for training:")
-            for data in memory:
-                sample = [0, 0, 0, 0]
-                # print(data[0])
-                if data[1] >= 0:
-                    sample[data[1]] = 1
-                trainingData.append([data[0], sample])
+        if won and firstWin == -1:
+            firstWin = (gen * x)  + iteration
 
-        scores.append(score)
-        print("Generation: ", gen, " | Iteration: ", iteration, " | Won: ", won, " | Score: ", "{0:10.4f}".format(totalScore, 5), " / ", score_req)
+        if state_temp and reward_temp and action_temp:
+            session.run(update, feed_dict={rewards: reward_temp, actions: action_temp, states: state_temp})
+            print("Step: ", (gen * x) + iteration, " | First Win: ", firstWin, " | Won: ", won, " | Greedy Value: ", "{0:6.4f}".format(greedy_value), " | Score: ", "{0:8.2f}".format(totalScore))
+        state_temp = []
+        reward_temp = []
+        action_temp = []
 
-        
-        if len(trainingData) > dataSizeLimit:
-            break
-
-    # saveData = np.array([trainingData, score_req])
-    # np.save('trainData.py', saveData)
-
-    return trainingData
-
-def reshapeData(data):
-    if (len(data) > 0):
-        obs = np.array([i[0] for i in data])
-        direction = [i[1] for i in data]
-    else:
-            obs = []
-            direction = []
-    return obs, direction
-
-def create_model(data):
-    obs, direction = reshapeData(data)
-    output_len = len(direction[0])
-    # print(input_len, obs.shape, len(obs[0]), len(obs[0][0]), len(obs[0][0][0]))
-    obs = np.float32(obs)
-    neurNet = tflearn.layers.core.input_data(shape=[None, len(obs[0]), len(obs[0][0]), len(obs[0][0][0])])
+def create_model(shape):
+    neurNet = tf.transpose(shape, [0, 2, 3, 1])
     neurNet = tflearn.layers.conv.conv_2d(neurNet, 16, 3, strides = 1, activation="relu")
     neurNet = tflearn.layers.conv.conv_2d(neurNet, 32, 3, strides = 1, activation="relu")
 
     neurNet = tflearn.layers.core.fully_connected(neurNet, 256, activation="relu")
-    neurNet = tflearn.layers.core.fully_connected(neurNet, output_len)
-    neurNet = tflearn.layers.estimator.regression(neurNet, learning_rate=learnRate)
-    model = tflearn.models.dnn.DNN(neurNet, tensorboard_dir="logs")
+    model = tflearn.layers.core.fully_connected(neurNet, 4, name="model")
 
     return model
 
-def fitModel(model, X, Y):
-    model.fit(X, Y, n_epoch=epochs, batch_size=32, show_metric=True)
-    model.save('pacman2.tflearn')
+def train(session):
+    global greedy_value
+    generation = 0
 
+    if loadModel == True:
+        saver = tf.train.import_meta_graph(load_path + ".meta")
+        saver.restore(session, load_path)
+        graph = tf.get_default_graph()
+        states = graph.get_tensor_by_name("states:0")
+        rewards = graph.get_tensor_by_name("rewards:0")
+        actions = graph.get_tensor_by_name("actions:0")
+        optimizer = graph.get_operation_by_name("optimizer")
+        model = graph.get_tensor_by_name("model/BiasAdd:0")
 
-def train():
-    global steps, score_req, init_greed
-    generation = startGeneration
-    increaseScore = True
-
-    print("Generation ", generation)
-
-    tempReq = score_req
-    score_req = 35
-    if loadModel == False:
-        data = genData(init_games, None, generation)
+        generation = loadGeneration + 1
+        greedy_value = greedy_value - (greedy_decrement * generation)
     else:
-        data = genData(10, None, generation)
-    model = create_model(data)
+        saver = tf.train.Saver(max_to_keep=10)
+        states = tf.placeholder(tf.float32, [None, 6, thisLevel.getHeight(), thisLevel.getWidth()], name="states")
+        rewards = tf.placeholder("float", [None], name="rewards")
+        actions = tf.placeholder("float", [None, 4], name="actions")
 
-    score_req = tempReq - score_inc
+        model = create_model(states)
 
-    if (loadModel == False):
-        obs, direc = reshapeData(data)
-        fitModel(model, obs, direc)
-        generation += 1
-    else:
-        model.load('pacman.tflearn')
-        generation += 1
+        actionQ = tf.reduce_sum(tf.multiply(model, actions), axis=1)
+        loss = tflearn.objectives.mean_square(actionQ, rewards)
+        # loss = tf.reduce_mean(tf.square(reward - actionQ))
+        optimizer = tf.train.RMSPropOptimizer(learning_rate=learnRate, decay=0.99).minimize(loss, name="optimizer")
+
+        generation = 0
+
+    session.run(tf.global_variables_initializer())
+    # session.run(tf.local_variables_initializer())
+
+    if greedy_value < greedy_stop:
+        greedy_value = greedy_stop
 
     while True:
-        if increaseScore == True and score_req < score_req_cap:
-            score_req += score_inc
-        else:
-            increaseScore = True
-
-        if init_greed > final_greed:
-            init_greed -= inc_greed
-            if init_greed < final_greed:
-                init_greed = final_greed
-
         print("Generation ", generation)
-        newData = genData(init_games, model, generation)
+        genData(games_per_gen, model, generation, session, optimizer, saver, states, rewards, actions)
 
-        if newData != []:
-            data = newData
-        else:
-            increaseScore = False
+        if greedy_value > greedy_stop:
+            greedy_value -= greedy_decrement
+            if greedy_value < greedy_stop:
+                greedy_value = greedy_stop
 
-
-        obs, direc = reshapeData(data)
-        fitModel(model, obs, direc)
+        saver.save(session, "./models/model", global_step=generation)
         generation += 1
 
+def main(_):
+    with tf.Session() as session:
+        train(session)
 
-train()
+if __name__ == "__main__":
+    tf.app.run()
