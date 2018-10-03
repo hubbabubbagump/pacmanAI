@@ -213,10 +213,11 @@ class game ():
         
         for specialScore in extraLifeSet:
             if self.score < specialScore and self.score + amount >= specialScore:
-                snd_extralife.play()
+                # snd_extralife.play()
                 # thisGame.lives += 1
+                continue
         
-        self.score += amount
+        # self.score += amount
         
     
     def DrawScore (self):
@@ -658,7 +659,8 @@ class ghost ():
                 self.y = self.nearestRow * 16
             
                 # chase pac-man
-                self.currentPath = path.FindPath( (self.nearestRow, self.nearestCol), (player.nearestRow, player.nearestCol) )
+                # self.currentPath = path.FindPath( (self.nearestRow, self.nearestCol), (player.nearestRow, player.nearestCol) )
+                self.generatePathway()
                 self.FollowNextPathWay()
         
         if (self.nearestCol > thisLevel.getWidth()) or (self.nearestRow > thisLevel.getHeight()) or (self.nearestCol < 0) or (self.nearestRow < 0):
@@ -667,8 +669,29 @@ class ghost ():
 
     def generatePathway(self):
         if not self.state == 3:
-            # chase pac-man
-            self.currentPath = path.FindPath( (self.nearestRow, self.nearestCol), (player.nearestRow, player.nearestCol) )
+            if self.state == 1:
+                randValue = random.randint(0, 26)
+                if randValue < 20:
+                    # chase pac-man
+                    self.currentPath = path.FindPath( (self.nearestRow, self.nearestCol), (player.nearestRow, player.nearestCol) )
+                else:
+                    # give ghost a path to a random spot (containing a pellet)
+                    (randRow, randCol) = (0, 0)
+
+                    while not thisLevel.GetMapTile((randRow, randCol)) == tileID[ 'pellet' ] or (randRow, randCol) == (0, 0):
+                        randRow = random.randint(1, thisLevel.lvlHeight - 2)
+                        randCol = random.randint(1, thisLevel.lvlWidth - 2)
+
+                    self.currentPath = path.FindPath( (self.nearestRow, self.nearestCol), (randRow, randCol) )
+            else:
+                # give ghost a path to a random spot (containing a pellet)
+                (randRow, randCol) = (0, 0)
+
+                while not thisLevel.GetMapTile((randRow, randCol)) == tileID[ 'pellet' ] or (randRow, randCol) == (0, 0):
+                    randRow = random.randint(1, thisLevel.lvlHeight - 2)
+                    randCol = random.randint(1, thisLevel.lvlWidth - 2)
+
+                self.currentPath = path.FindPath( (self.nearestRow, self.nearestCol), (randRow, randCol) )
         else:
             # glasses found way back to ghost box
             self.state = 1
@@ -783,7 +806,7 @@ class fruit ():
         elif self.bouncei == 16:
             self.bounceY = 0
             self.bouncei = 0
-            snd_fruitbounce.play()
+            # snd_fruitbounce.play()
         
         self.slowTimer += 1
         if self.slowTimer == 2:
@@ -924,12 +947,12 @@ class pacman ():
                         # make them run
                         thisGame.AddToScore(thisGame.ghostValue)
                         thisGame.ghostValue = thisGame.ghostValue * 2
-                        snd_eatgh.play()
+                        # snd_eatgh.play()
 
                         self.reward = eatGhost
                         
                         ghosts[i].state = 3
-                        ghosts[i].speed = ghosts[i].speed * 2
+                        ghosts[i].speed = ghosts[i].speed * 4
                         # and send them to the ghost box
                         ghosts[i].x = ghosts[i].nearestCol * 16
                         ghosts[i].y = ghosts[i].nearestRow * 16
@@ -946,7 +969,7 @@ class pacman ():
                     thisFruit.active = False
                     thisGame.fruitTimer = 0
                     thisGame.fruitScoreTimer = 120
-                    snd_eatfruit.play()
+                    # snd_eatfruit.play()
         
         else:
             # we're going to hit a wall -- stop moving
@@ -961,6 +984,7 @@ class pacman ():
                 for i in range(0, 4, 1):
                     if ghosts[i].state == 2:
                         ghosts[i].state = 1
+                        ghosts[i].speed *= 2
                 self.ghostValue = 0
                 
         # deal with fruit timer
@@ -1133,7 +1157,7 @@ class level ():
                     if result == tileID[ 'pellet' ]:
                         # got a pellet
                         thisLevel.SetMapTile((iRow, iCol), 0)
-                        snd_pellet[player.pelletSndNum].play()
+                        # snd_pellet[player.pelletSndNum].play()
                         player.pelletSndNum = 1 - player.pelletSndNum
                         player.reward = eatDot
                         
@@ -1150,7 +1174,7 @@ class level ():
                     elif result == tileID[ 'pellet-power' ]:
                         # got a power pellet
                         thisLevel.SetMapTile((iRow, iCol), 0)
-                        snd_powerpellet.play()
+                        # snd_powerpellet.play()
                         player.reward = eatDot
                         
                         thisGame.AddToScore(100)
@@ -1158,8 +1182,10 @@ class level ():
                         
                         thisGame.ghostTimer = 360
                         for i in range(0, 4, 1):
-                            if ghosts[i].state == 1:
+                            if ghosts[i].state == 1 and ghosts[i].state != 2:
                                 ghosts[i].state = 2
+                                ghosts[i].speed = ghosts[i].speed / 2
+                                ghosts[i].currentPath = ""
                         
                     elif result == tileID[ 'door-h' ]:
                         # ran into a horizontal door
@@ -1573,9 +1599,9 @@ learnRate = 1e-3
 games_per_gen = 30
 
 #Loading saved model
-loadModel = False
-loadGeneration = 0
-load_path = "./models/model-" + str(loadGeneration)
+# loadModel = True
+# loadGeneration = 154
+# load_path = "./models/model-" + str(loadGeneration)
 
 #Greedy method
 greedy_value = 1
@@ -1703,7 +1729,7 @@ def renderGame(action, gen, iteration):
         thisLevel.DrawMap()
 
         thisGame.DrawNumber(gen, (5, 5))
-        thisGame.DrawNumber(iteration, (5, 21))
+        thisGame.DrawNumber((gen * games_per_gen) + iteration, (5, 21))
         
         # if thisGame.fruitScoreTimer > 0:
         #     if thisGame.modeTimer % 2 == 0:
@@ -1746,7 +1772,8 @@ def genData(x, model, gen, session, update, saver, states, rewards, actions):
 
         while True:
             currentObservation = player.map()
-            prediction = model.eval(session=session, feed_dict={states: [currentObservation]})
+            # prediction = model.eval(session=session, feed_dict={states: [currentObservation]})
+            prediction = session.run(model, feed_dict={states: [currentObservation]})
 
             greedy = random.uniform(0, 1.0)
             if greedy < greedy_value:
@@ -1788,66 +1815,51 @@ def genData(x, model, gen, session, update, saver, states, rewards, actions):
 
 def create_model(shape):
     neurNet = tf.transpose(shape, [0, 2, 3, 1])
-    neurNet = tflearn.layers.conv.conv_2d(neurNet, 16, 3, strides = 1, activation="relu")
-    neurNet = tflearn.layers.conv.conv_2d(neurNet, 32, 3, strides = 1, activation="relu")
+    neurNet = tflearn.layers.conv.conv_2d(neurNet, 16, 3, strides = 1, activation="relu", restore=True)
+    neurNet = tflearn.layers.conv.conv_2d(neurNet, 32, 3, strides = 1, activation="relu", restore=True)
 
-    neurNet = tflearn.layers.core.fully_connected(neurNet, 256, activation="relu")
-    model = tflearn.layers.core.fully_connected(neurNet, 4, name="model")
+    neurNet = tflearn.layers.core.fully_connected(neurNet, 256, activation="relu", restore=True)
+    model = tflearn.layers.core.fully_connected(neurNet, 4, name="model", restore=True)
 
     return model
 
-def train(session):
+def train():
     global greedy_value
+
+    states = tf.placeholder(tf.float32, [None, 6, thisLevel.getHeight(), thisLevel.getWidth()], name="states")
+    rewards = tf.placeholder("float", [None], name="rewards")
+    actions = tf.placeholder("float", [None, 4], name="actions")
+
+    model = create_model(states)
+
+    actionQ = tf.reduce_sum(tf.multiply(model, actions), axis=1)
+    loss = tflearn.objectives.mean_square(actionQ, rewards)
+    # loss = tf.reduce_mean(tf.square(reward - actionQ))
+    optimizer = tf.train.RMSPropOptimizer(learning_rate=learnRate, decay=0.99, name="RMSOp").minimize(loss, name="optimizer")
+
+    saver = tf.train.Saver(max_to_keep=2)
     generation = 0
 
-    if loadModel == True:
-        saver = tf.train.import_meta_graph(load_path + ".meta")
-        saver.restore(session, load_path)
-        graph = tf.get_default_graph()
-        states = graph.get_tensor_by_name("states:0")
-        rewards = graph.get_tensor_by_name("rewards:0")
-        actions = graph.get_tensor_by_name("actions:0")
-        optimizer = graph.get_operation_by_name("optimizer")
-        model = graph.get_tensor_by_name("model/BiasAdd:0")
+    with tf.Session() as session:
+        session.run(tf.global_variables_initializer())
 
-        generation = loadGeneration + 1
-        greedy_value = greedy_value - (greedy_decrement * generation)
-    else:
-        saver = tf.train.Saver(max_to_keep=10)
-        states = tf.placeholder(tf.float32, [None, 6, thisLevel.getHeight(), thisLevel.getWidth()], name="states")
-        rewards = tf.placeholder("float", [None], name="rewards")
-        actions = tf.placeholder("float", [None, 4], name="actions")
+        if greedy_value < greedy_stop:
+            greedy_value = greedy_stop
 
-        model = create_model(states)
+        while True:
+            print("Generation ", generation)
+            genData(games_per_gen, model, generation, session, optimizer, saver, states, rewards, actions)
 
-        actionQ = tf.reduce_sum(tf.multiply(model, actions), axis=1)
-        loss = tflearn.objectives.mean_square(actionQ, rewards)
-        # loss = tf.reduce_mean(tf.square(reward - actionQ))
-        optimizer = tf.train.RMSPropOptimizer(learning_rate=learnRate, decay=0.99).minimize(loss, name="optimizer")
+            if greedy_value > greedy_stop:
+                greedy_value -= greedy_decrement
+                if greedy_value < greedy_stop:
+                    greedy_value = greedy_stop
 
-        generation = 0
-
-    session.run(tf.global_variables_initializer())
-    # session.run(tf.local_variables_initializer())
-
-    if greedy_value < greedy_stop:
-        greedy_value = greedy_stop
-
-    while True:
-        print("Generation ", generation)
-        genData(games_per_gen, model, generation, session, optimizer, saver, states, rewards, actions)
-
-        if greedy_value > greedy_stop:
-            greedy_value -= greedy_decrement
-            if greedy_value < greedy_stop:
-                greedy_value = greedy_stop
-
-        saver.save(session, "./models/model", global_step=generation)
-        generation += 1
+            saver.save(session, "./models/model", global_step=generation)
+            generation += 1
 
 def main(_):
-    with tf.Session() as session:
-        train(session)
+        train()
 
 if __name__ == "__main__":
     tf.app.run()
